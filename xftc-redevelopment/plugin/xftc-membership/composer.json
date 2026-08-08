@@ -1,0 +1,10 @@
+{
+    "name": "dpoly2/xftc-membership",
+    "description": "XFTC Membership WordPress Plugin",
+    "require-dev": {
+        "phpunit/phpunit": "^10"
+    },
+    "autoload-dev": {
+        "classmap": ["tests/"]
+    }
+}
