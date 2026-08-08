@@ -1,0 +1,70 @@
+name: Create Issue on CI Failure
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+jobs:
+  create-issue:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+
+    steps:
+      - name: Get PR info
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const prs = run.pull_requests;
+            const prNumber = prs && prs.length > 0 ? prs[0].number : null;
+            const prUrl = prNumber
+              ? `https://github.com/${context.repo.owner}/${context.repo.repo}/pull/${prNumber}`
+              : '_No associated PR_';
+            core.setOutput('pr_number', prNumber || '');
+            core.setOutput('pr_url', prUrl);
+            core.setOutput('run_url', run.html_url);
+            core.setOutput('branch', run.head_branch);
+            core.setOutput('sha', run.head_sha.substring(0, 7));
+            core.setOutput('actor', run.triggering_actor?.login || 'unknown');
+
+      - name: Create tracking issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = '${{ steps.pr.outputs.pr_number }}';
+            const prUrl    = '${{ steps.pr.outputs.pr_url }}';
+            const runUrl   = '${{ steps.pr.outputs.run_url }}';
+            const branch   = '${{ steps.pr.outputs.branch }}';
+            const sha      = '${{ steps.pr.outputs.sha }}';
+            const actor    = '${{ steps.pr.outputs.actor }}';
+
+            const title = `CI failure on \`${branch}\` (${sha})`;
+            const body = [
+              '## CI Failure Report',
+              '',
+              `| Field | Value |`,
+              `|---|---|`,
+              `| **Branch** | \`${branch}\` |`,
+              `| **Commit** | \`${sha}\` |`,
+              `| **Author** | @${actor} |`,
+              `| **PR** | ${prUrl} |`,
+              `| **Run** | [View logs](${runUrl}) |`,
+              '',
+              '### Next steps',
+              '- [ ] Review the failed logs linked above',
+              '- [ ] Fix the failing tests',
+              '- [ ] Close this issue when the PR is green',
+            ].join('\n');
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['ci-failure'],
+            });
