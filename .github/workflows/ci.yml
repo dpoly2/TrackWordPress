@@ -19,9 +19,9 @@ jobs:
           tools: composer
 
       - name: Install dependencies
-        working-directory: xftc-redevelopment/plugin/xftc-membership
+        working-directory: xftc-redevelopment/plugin/ts-membership
         run: composer install --no-interaction --prefer-dist
 
       - name: Run tests
-        working-directory: xftc-redevelopment/plugin/xftc-membership
+        working-directory: xftc-redevelopment/plugin/ts-membership
         run: vendor/bin/phpunit
