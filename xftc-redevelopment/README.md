@@ -79,6 +79,7 @@ been re-verified against a live install as part of the fix.
 
 | Document | Description |
 |----------|-------------|
+| [docs/](docs/README.md) | **Admin/parent/coach user guides** — installation, day-to-day operation, troubleshooting |
 | [PROPOSAL.md](PROPOSAL.md) | 12-week project proposal |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Technical architecture overview |
 | [SPRINT-1.md](SPRINT-1.md) | Sprint 1 task log |
