@@ -41,6 +41,8 @@ class TRACKSUITE_Public {
             'TRACKSUITE_my_results'    => 'shortcode_my_results',
             'TRACKSUITE_my_payments'   => 'shortcode_my_payments',
             'TRACKSUITE_my_travel'     => 'shortcode_my_travel',
+            'TRACKSUITE_my_orders'     => 'shortcode_my_orders',
+            'TRACKSUITE_staff_portal'  => 'shortcode_staff_portal',
             // Legacy aliases (Sprint 1)
             'TRACKSUITE_register'      => 'shortcode_register_form',
             'TRACKSUITE_portal'        => 'shortcode_my_athletes',
@@ -55,6 +57,7 @@ class TRACKSUITE_Public {
             'TRACKSUITE_register_for_meet'   => 'ajax_register_for_meet',
             'TRACKSUITE_login'               => 'ajax_login',
             'TRACKSUITE_get_chart_data'      => 'ajax_get_chart_data',
+            'TRACKSUITE_staff_add_result'    => 'ajax_staff_add_result',
         ];
         foreach ( $ajax_actions as $action => $method ) {
             add_action( "wp_ajax_{$action}",        [ $this, $method ] );
@@ -88,6 +91,9 @@ class TRACKSUITE_Public {
             'isLoggedIn'    => is_user_logged_in(),
             'portalUrl'     => home_url( '/portal' ),
             'registerUrl'   => home_url( '/register' ),
+            // Self-hosted Chart.js — loaded on demand only when a results
+            // chart canvas is actually present (see public.js).
+            'chartJsUrl'    => TRACKSUITE_PLUGIN_URL . 'public/assets/vendor/chart.umd.min.js',
         ] );
     }
 
@@ -547,6 +553,79 @@ class TRACKSUITE_Public {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
+    // SHORTCODE: [TRACKSUITE_my_orders] — WooCommerce store order history
+    // ═══════════════════════════════════════════════════════════════════════
+
+    public function shortcode_my_orders( array $atts ): string {
+        if ( ! is_user_logged_in() ) return $this->login_prompt();
+
+        if ( ! class_exists( 'TRACKSUITE_WooCommerce' ) ) {
+            return '<div class="ts-notice ts-notice--info">' . esc_html__( 'The club store is not available right now.', 'ts-membership' ) . '</div>';
+        }
+
+        $orders = TRACKSUITE_WooCommerce::get_orders_for_user( get_current_user_id() );
+
+        if ( empty( $orders ) ) {
+            return '<div class="ts-notice ts-notice--info">' . esc_html__( 'No store orders yet.', 'ts-membership' ) . '</div>';
+        }
+
+        ob_start();
+        ?>
+        <table class="ts-table">
+            <thead><tr><th><?php esc_html_e( 'Order', 'ts-membership' ); ?></th><th><?php esc_html_e( 'Date', 'ts-membership' ); ?></th><th><?php esc_html_e( 'Status', 'ts-membership' ); ?></th><th><?php esc_html_e( 'Total', 'ts-membership' ); ?></th></tr></thead>
+            <tbody>
+            <?php foreach ( $orders as $order ) : ?>
+                <tr>
+                    <td>#<?php echo esc_html( $order->get_order_number() ); ?></td>
+                    <td><?php echo esc_html( wc_format_datetime( $order->get_date_created() ) ); ?></td>
+                    <td><span class="ts-status ts-status-<?php echo esc_attr( $order->get_status() ); ?>"><?php echo esc_html( wc_get_order_status_name( $order->get_status() ) ); ?></span></td>
+                    <td><?php echo wp_kses_post( $order->get_formatted_order_total() ); ?></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php
+        return ob_get_clean();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SHORTCODE: [TRACKSUITE_staff_portal]
+    // Front-end home for coaches/staff so they never need wp-admin:
+    // coaches get meet rosters + a result-entry form, staff get their own
+    // hours/pay history.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    public function shortcode_staff_portal( array $atts ): string {
+        if ( ! is_user_logged_in() ) return $this->login_prompt();
+
+        $user     = wp_get_current_user();
+        $is_coach = current_user_can( 'TRACKSUITE_coach' ) || current_user_can( 'TRACKSUITE_admin' ) || current_user_can( 'administrator' );
+        $is_staff = current_user_can( 'TRACKSUITE_staff' ) || current_user_can( 'TRACKSUITE_admin' ) || current_user_can( 'administrator' );
+
+        if ( ! $is_coach && ! $is_staff ) {
+            return '<div class="ts-notice ts-notice--warning">' . esc_html__( 'This area is for coaches and staff only.', 'ts-membership' ) . '</div>';
+        }
+
+        $coach_meets = $staff_payroll = [];
+        $staff_record = null;
+
+        if ( $is_coach ) {
+            $meets_obj  = new TRACKSUITE_Meets();
+            $coach_meets = array_merge( $meets_obj->get_all_meets( 'upcoming' ), $meets_obj->get_all_meets( 'active' ) );
+        }
+
+        if ( $is_staff ) {
+            $payroll_obj  = new TRACKSUITE_Payroll();
+            $staff_record = $payroll_obj->get_staff_by_user( $user->ID );
+            $staff_payroll = $staff_record ? $payroll_obj->get_staff_payroll( (int) $staff_record['id'] ) : [];
+        }
+
+        ob_start();
+        include TRACKSUITE_PLUGIN_DIR . 'public/views/staff-portal.php';
+        return ob_get_clean();
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     // AJAX HANDLERS
     // ═══════════════════════════════════════════════════════════════════════
 
@@ -595,6 +674,10 @@ class TRACKSUITE_Public {
             }
         }
 
+        if ( empty( $_POST['data_consent'] ) ) {
+            wp_send_json_error( [ 'message' => __( 'You must consent to the collection of your child\'s information to register.', 'ts-membership' ) ] );
+        }
+
         $email = sanitize_email( $_POST['parent_email'] );
         if ( email_exists( $email ) ) {
             wp_send_json_error( [ 'message' => __( 'An account with this email already exists. Please log in.', 'ts-membership' ) ] );
@@ -620,6 +703,9 @@ class TRACKSUITE_Public {
             'role'         => 'TRACKSUITE_parent',
         ] );
 
+        // Record consent (what/when) for the GDPR-style export/audit trail.
+        update_user_meta( $user_id, 'TRACKSUITE_data_consent_at', current_time( 'mysql' ) );
+
         // Create athlete record
         $members = new TRACKSUITE_Members();
         $athlete_id = $members->create( [
@@ -641,6 +727,15 @@ class TRACKSUITE_Public {
         // Auto log in
         wp_set_current_user( $user_id );
         wp_set_auth_cookie( $user_id, true );
+
+        // Create the season membership record if the form collected a season/tier
+        // selection (registration form step 3) — without this the athlete profile
+        // was created but never actually enrolled/billed for a season.
+        $season_id = absint( $_POST['season_id'] ?? 0 );
+        if ( $season_id && class_exists( 'TRACKSUITE_Registration' ) ) {
+            $tier = sanitize_text_field( $_POST['tier'] ?? 'standard' );
+            TRACKSUITE_Registration::create_membership( (int) $athlete_id, $season_id, $tier, $user_id );
+        }
 
         // Send welcome email
         if ( class_exists( 'TRACKSUITE_Emails' ) ) {
@@ -702,6 +797,10 @@ class TRACKSUITE_Public {
     public function ajax_get_chart_data(): void {
         check_ajax_referer( 'TRACKSUITE_public_nonce', 'TRACKSUITE_nonce' );
 
+        if ( ! is_user_logged_in() ) {
+            wp_send_json_error( [ 'message' => __( 'You must be logged in.', 'ts-membership' ) ] );
+        }
+
         $athlete_id = absint( $_POST['athlete_id'] ?? 0 );
         $event      = sanitize_text_field( $_POST['event'] ?? '' );
 
@@ -709,9 +808,54 @@ class TRACKSUITE_Public {
             wp_send_json_error( [] );
         }
 
+        // Verify this athlete belongs to the logged-in parent (or requester is coach/admin) —
+        // prevents any authenticated user from pulling another athlete's performance data by id.
+        $members = new TRACKSUITE_Members();
+        $athlete = $members->get( $athlete_id );
+        $is_owner = $athlete && (int) $athlete->parent_id === get_current_user_id();
+        $is_staff = current_user_can( 'TRACKSUITE_coach' ) || current_user_can( 'TRACKSUITE_admin' ) || current_user_can( 'administrator' );
+        if ( ! $athlete || ( ! $is_owner && ! $is_staff ) ) {
+            wp_send_json_error( [ 'message' => __( 'You do not have permission to view this data.', 'ts-membership' ) ] );
+        }
+
         $results    = new TRACKSUITE_Results();
         $chart_data = $results->get_progression_chart_data( $athlete_id, $event );
         wp_send_json_success( $chart_data );
+    }
+
+    /**
+     * AJAX: Coach/admin enters a meet result from the front-end staff portal.
+     */
+    public function ajax_staff_add_result(): void {
+        check_ajax_referer( 'TRACKSUITE_public_nonce', 'TRACKSUITE_nonce' );
+
+        $can_enter = current_user_can( 'TRACKSUITE_coach' ) || current_user_can( 'TRACKSUITE_admin' ) || current_user_can( 'administrator' );
+        if ( ! $can_enter ) {
+            wp_send_json_error( [ 'message' => __( 'You do not have permission to enter results.', 'ts-membership' ) ] );
+        }
+
+        $meet_id    = absint( $_POST['meet_id'] ?? 0 );
+        $athlete_id = absint( $_POST['athlete_id'] ?? 0 );
+
+        if ( ! $meet_id || ! $athlete_id || empty( $_POST['event_category'] ) || empty( $_POST['result_value'] ) ) {
+            wp_send_json_error( [ 'message' => __( 'Meet, athlete, event, and result are required.', 'ts-membership' ) ] );
+        }
+
+        $results = new TRACKSUITE_Results();
+        $id      = $results->add_result( [
+            'meet_id'        => $meet_id,
+            'athlete_id'     => $athlete_id,
+            'event_category' => sanitize_text_field( $_POST['event_category'] ),
+            'placement'      => isset( $_POST['placement'] ) && $_POST['placement'] !== '' ? absint( $_POST['placement'] ) : null,
+            'result_value'   => sanitize_text_field( $_POST['result_value'] ),
+            'result_unit'    => sanitize_text_field( $_POST['result_unit'] ?? 'time' ),
+        ] );
+
+        if ( ! $id ) {
+            wp_send_json_error( [ 'message' => __( 'Could not save result.', 'ts-membership' ) ] );
+        }
+
+        wp_send_json_success( [ 'message' => __( 'Result saved.', 'ts-membership' ), 'result_id' => $id ] );
     }
 
     // ═══════════════════════════════════════════════════════════════════════

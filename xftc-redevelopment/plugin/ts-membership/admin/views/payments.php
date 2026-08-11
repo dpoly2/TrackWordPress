@@ -15,7 +15,7 @@
 
 if ( ! defined( 'ABSPATH' ) ) exit;
 
-// Save settings on form submit
+// Save Stripe settings on form submit
 if ( isset( $_POST['TRACKSUITE_payments_nonce'] ) && wp_verify_nonce( $_POST['TRACKSUITE_payments_nonce'], 'TRACKSUITE_save_payment_settings' ) ) {
     update_option( 'TRACKSUITE_stripe_test_mode',              isset( $_POST['TRACKSUITE_stripe_test_mode'] ) ? 1 : 0 );
     update_option( 'TRACKSUITE_stripe_test_publishable_key',   sanitize_text_field( $_POST['TRACKSUITE_stripe_test_publishable_key'] ?? '' ) );
@@ -25,6 +25,30 @@ if ( isset( $_POST['TRACKSUITE_payments_nonce'] ) && wp_verify_nonce( $_POST['TR
     update_option( 'TRACKSUITE_stripe_webhook_secret',         sanitize_text_field( $_POST['TRACKSUITE_stripe_webhook_secret'] ?? '' ) );
 
     echo '<div class="notice notice-success"><p><strong>Payment settings saved.</strong></p></div>';
+}
+
+// Record a manual (cash/check) payment
+if ( isset( $_POST['TRACKSUITE_manual_payment_nonce'] ) && wp_verify_nonce( $_POST['TRACKSUITE_manual_payment_nonce'], 'TRACKSUITE_manual_payment' ) ) {
+    $manual_user_id     = absint( $_POST['manual_user_id'] ?? 0 );
+    $manual_type        = sanitize_key( $_POST['manual_type'] ?? '' );
+    $manual_reference_id = absint( $_POST['manual_reference_id'] ?? 0 );
+    $manual_amount      = (float) ( $_POST['manual_amount'] ?? 0 );
+
+    if ( ! $manual_user_id || ! $manual_reference_id || $manual_amount <= 0 || ! in_array( $manual_type, [ 'membership', 'travel' ], true ) ) {
+        echo '<div class="notice notice-error"><p>Please select a parent, a valid payment type, a reference ID, and an amount greater than zero.</p></div>';
+    } else {
+        $payments  = new TRACKSUITE_Payments();
+        $recorded  = $payments->record_manual_payment( [
+            'user_id'      => $manual_user_id,
+            'type'         => $manual_type,
+            'reference_id' => $manual_reference_id,
+            'amount'       => $manual_amount,
+            'notes'        => sanitize_text_field( $_POST['manual_notes'] ?? '' ),
+        ] );
+        echo $recorded
+            ? '<div class="notice notice-success"><p><strong>Manual payment recorded.</strong></p></div>'
+            : '<div class="notice notice-error"><p>Could not record payment.</p></div>';
+    }
 }
 
 // Current values
@@ -145,9 +169,8 @@ $is_configured      = ! empty( $test_mode ? $test_sec_key : $live_sec_key );
 
     <hr>
 
-    <!-- Payment History Table (Placeholder) -->
+    <!-- Payment History -->
     <h2>Payment History</h2>
-    <p class="description">Recent transactions will appear here once Stripe is configured and payments are processed.</p>
 
     <table class="wp-list-table widefat fixed striped">
         <thead>
@@ -163,9 +186,8 @@ $is_configured      = ! empty( $test_mode ? $test_sec_key : $live_sec_key );
         </thead>
         <tbody>
             <?php
-            // TODO: Load from wp_ts_payments when Stripe is active
-            global $wpdb;
-            $payments = []; // $wpdb->get_results("SELECT * FROM {$wpdb->prefix}TRACKSUITE_payments ORDER BY created_at DESC LIMIT 50");
+            $payments_obj = new TRACKSUITE_Payments();
+            $payments     = $payments_obj->get_all_payments();
 
             if ( empty( $payments ) ) : ?>
                 <tr>
@@ -176,15 +198,15 @@ $is_configured      = ! empty( $test_mode ? $test_sec_key : $live_sec_key );
             <?php else :
                 foreach ( $payments as $payment ) : ?>
                     <tr>
-                        <td><?php echo esc_html( $payment->created_at ); ?></td>
-                        <td><?php echo esc_html( get_userdata( $payment->user_id )->display_name ?? '—' ); ?></td>
-                        <td><?php echo esc_html( ucfirst( $payment->reference_type ) ); ?></td>
-                        <td>$<?php echo number_format( $payment->amount, 2 ); ?></td>
-                        <td><?php echo esc_html( strtoupper( $payment->gateway ) ); ?></td>
-                        <td><code><?php echo esc_html( $payment->transaction_id ); ?></code></td>
+                        <td><?php echo esc_html( $payment['created_at'] ); ?></td>
+                        <td><?php echo esc_html( $payment['display_name'] ?? '—' ); ?></td>
+                        <td><?php echo esc_html( ucfirst( $payment['reference_type'] ) ); ?></td>
+                        <td>$<?php echo number_format( (float) $payment['amount'], 2 ); ?></td>
+                        <td><?php echo esc_html( strtoupper( $payment['gateway'] ) ); ?></td>
+                        <td><code><?php echo esc_html( $payment['transaction_id'] ); ?></code></td>
                         <td>
-                            <span class="ts-status ts-status-<?php echo esc_attr( $payment->status ); ?>">
-                                <?php echo esc_html( ucfirst( $payment->status ) ); ?>
+                            <span class="ts-status ts-status-<?php echo esc_attr( $payment['status'] ); ?>">
+                                <?php echo esc_html( ucfirst( $payment['status'] ) ); ?>
                             </span>
                         </td>
                     </tr>
@@ -221,8 +243,14 @@ $is_configured      = ! empty( $test_mode ? $test_sec_key : $live_sec_key );
                     <select name="manual_type" id="manual_type">
                         <option value="membership">Membership Fee</option>
                         <option value="travel">Travel Fee</option>
-                        <option value="other">Other</option>
                     </select>
+                </td>
+            </tr>
+            <tr>
+                <th><label for="manual_reference_id">Membership / Travel ID</label></th>
+                <td>
+                    <input type="number" name="manual_reference_id" id="manual_reference_id" min="1" class="small-text" required>
+                    <p class="description">The membership or travel booking this payment applies to — find it on the Members or Travel screen.</p>
                 </td>
             </tr>
             <tr>

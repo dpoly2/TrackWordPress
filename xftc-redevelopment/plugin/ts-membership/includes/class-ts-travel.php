@@ -28,22 +28,16 @@ class TRACKSUITE_Travel {
 
     public function create_booking( array $data ): int|false {
         global $wpdb;
+        $meet_id    = (int) $data['meet_id'];
+        $athlete_id = (int) $data['athlete_id'];
+        $fee        = $this->calculate_fee( $data['travel_type'], $meet_id );
 
-        // Prevent duplicate bookings
-        $exists = $wpdb->get_var( $wpdb->prepare(
-            "SELECT id FROM {$this->travel_table} WHERE meet_id = %d AND athlete_id = %d",
-            $data['meet_id'], $data['athlete_id']
-        ) );
-        if ( $exists ) return (int) $exists;
-
-        $fee = $this->calculate_fee(
-            $data['travel_type'],
-            (int) $data['meet_id']
-        );
-
+        // The UNIQUE KEY meet_athlete (see class-ts-activator.php) is what actually
+        // prevents duplicate bookings under concurrent requests; this is just how
+        // we turn that DB-level rejection into "return the existing booking".
         $inserted = $wpdb->insert( $this->travel_table, [
-            'meet_id'        => (int) $data['meet_id'],
-            'athlete_id'     => (int) $data['athlete_id'],
+            'meet_id'        => $meet_id,
+            'athlete_id'     => $athlete_id,
             'travel_type'    => sanitize_text_field( $data['travel_type'] ?? 'bus' ),
             'bus_seat'       => sanitize_text_field( $data['bus_seat'] ?? '' ),
             'hotel_room'     => sanitize_text_field( $data['hotel_room'] ?? '' ),
@@ -52,7 +46,16 @@ class TRACKSUITE_Travel {
             'notes'          => sanitize_textarea_field( $data['notes'] ?? '' ),
             'registered_at'  => current_time( 'mysql' ),
         ] );
-        return $inserted ? $wpdb->insert_id : false;
+
+        if ( $inserted ) {
+            return (int) $wpdb->insert_id;
+        }
+
+        $existing = $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM {$this->travel_table} WHERE meet_id = %d AND athlete_id = %d",
+            $meet_id, $athlete_id
+        ) );
+        return $existing ? (int) $existing : false;
     }
 
     public function get_booking( int $id ): ?array {

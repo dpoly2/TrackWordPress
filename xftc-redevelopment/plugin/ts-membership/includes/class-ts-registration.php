@@ -115,38 +115,65 @@ class TRACKSUITE_Registration {
             wp_send_json_error( [ 'message' => __( 'You must be logged in.', 'ts-membership' ) ] );
         }
 
-        global $wpdb;
-
         $athlete_id = absint( $_POST['athlete_id'] ?? 0 );
         $season_id  = absint( $_POST['season_id'] ?? 0 );
         $tier       = sanitize_text_field( $_POST['tier'] ?? 'standard' );
 
-        // Validate athlete belongs to current parent
+        $result = self::create_membership( $athlete_id, $season_id, $tier, get_current_user_id() );
+
+        if ( is_wp_error( $result ) ) {
+            wp_send_json_error( [ 'message' => $result->get_error_message() ] );
+        }
+
+        wp_send_json_success( [
+            'message'       => __( 'Registration successful! Please complete payment.', 'ts-membership' ),
+            'membership_id' => $result['membership_id'],
+            'amount_due'    => $result['amount_due'],
+        ] );
+    }
+
+    /**
+     * Create (or return the existing) season membership record for an athlete.
+     * Shared by the standalone `TRACKSUITE_register_membership` AJAX action and
+     * the combined multi-step registration flow in TRACKSUITE_Public::ajax_register_athlete().
+     *
+     * @param int $athlete_id
+     * @param int $season_id
+     * @param string $tier 'standard'|'premium'
+     * @param int $requesting_user_id WP user id the athlete must belong to (parent), unless 0/skip-check is desired by an admin caller.
+     * @return array{membership_id:int,amount_due:float}|WP_Error
+     */
+    public static function create_membership( int $athlete_id, int $season_id, string $tier, int $requesting_user_id ) {
+        global $wpdb;
+
+        if ( ! $athlete_id || ! $season_id ) {
+            return new WP_Error( 'invalid_input', __( 'Invalid athlete or season.', 'ts-membership' ) );
+        }
+
         $members = new TRACKSUITE_Members();
         $athlete = $members->get( $athlete_id );
 
-        if ( ! $athlete || (int) $athlete->parent_id !== get_current_user_id() ) {
-            wp_send_json_error( [ 'message' => __( 'Invalid athlete.', 'ts-membership' ) ] );
+        if ( ! $athlete || (int) $athlete->parent_id !== $requesting_user_id ) {
+            return new WP_Error( 'invalid_athlete', __( 'Invalid athlete.', 'ts-membership' ) );
         }
 
-        // Get season fee
         $seasons = new TRACKSUITE_Seasons();
         $season  = $seasons->get( $season_id );
 
         if ( ! $season ) {
-            wp_send_json_error( [ 'message' => __( 'Invalid season.', 'ts-membership' ) ] );
+            return new WP_Error( 'invalid_season', __( 'Invalid season.', 'ts-membership' ) );
         }
 
+        $tier       = in_array( $tier, [ 'standard', 'premium' ], true ) ? $tier : 'standard';
         $amount_due = ( 'premium' === $tier ) ? (float) $season->fee_premium : (float) $season->fee_standard;
 
-        // Check for duplicate registration
-        $existing = $wpdb->get_var( $wpdb->prepare(
-            "SELECT id FROM {$wpdb->prefix}TRACKSUITE_memberships WHERE athlete_id = %d AND season_id = %d",
+        $existing = $wpdb->get_row( $wpdb->prepare(
+            "SELECT id, amount_due FROM {$wpdb->prefix}TRACKSUITE_memberships WHERE athlete_id = %d AND season_id = %d",
             $athlete_id, $season_id
         ) );
 
         if ( $existing ) {
-            wp_send_json_error( [ 'message' => __( 'This athlete is already registered for this season.', 'ts-membership' ) ] );
+            return [ 'membership_id' => (int) $existing->id, 'amount_due' => (float) $existing->amount_due ];
         }
 
         $result = $wpdb->insert( "{$wpdb->prefix}TRACKSUITE_memberships", [
@@ -160,14 +187,18 @@ class TRACKSUITE_Registration {
         ] );
 
         if ( false === $result ) {
-            wp_send_json_error( [ 'message' => $wpdb->last_error ] );
+            // Unique-key race: another request inserted the same (athlete_id, season_id) row first.
+            $existing = $wpdb->get_row( $wpdb->prepare(
+                "SELECT id, amount_due FROM {$wpdb->prefix}TRACKSUITE_memberships WHERE athlete_id = %d AND season_id = %d",
+                $athlete_id, $season_id
+            ) );
+            if ( $existing ) {
+                return [ 'membership_id' => (int) $existing->id, 'amount_due' => (float) $existing->amount_due ];
+            }
+            return new WP_Error( 'db_error', $wpdb->last_error );
         }
 
-        wp_send_json_success( [
-            'message'       => __( 'Registration successful! Please complete payment.', 'ts-membership' ),
-            'membership_id' => $wpdb->insert_id,
-            'amount_due'    => $amount_due,
-        ] );
+        return [ 'membership_id' => (int) $wpdb->insert_id, 'amount_due' => $amount_due ];
     }
 }
 

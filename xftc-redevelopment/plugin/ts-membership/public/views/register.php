@@ -182,6 +182,15 @@ defined( 'ABSPATH' ) || exit;
                     ) ); ?>
                 </label>
             </div>
+            <div class="ts-form__group">
+                <label>
+                    <input type="checkbox" name="data_consent" required>
+                    <?php echo wp_kses_post( sprintf(
+                        __( 'I consent to the collection of my child\'s information (name, date of birth, school, emergency contact) for club administration, and understand payment card details are handled directly by our payment processor. See our <a href="%s" target="_blank">privacy policy</a>.', 'ts-membership' ),
+                        esc_url( get_privacy_policy_url() ?: home_url( '/privacy-policy' ) )
+                    ) ); ?>
+                </label>
+            </div>
             <div class="ts-form__actions">
                 <button type="button" class="ts-btn ts-btn--outline ts-prev-step">← Back</button>
                 <button type="submit" class="ts-btn ts-btn--primary" id="ts-submit-btn">

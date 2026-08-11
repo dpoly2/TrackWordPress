@@ -126,60 +126,10 @@
         });
     });
 
-    // ── Results chart init (Chart.js — if present) ──────────────────────────
-    function initResultsChart() {
-        const canvas = document.getElementById('ts-results-chart');
-        if (!canvas || typeof Chart === 'undefined') return;
-
-        const rawData = canvas.dataset.chartData;
-        if (!rawData) return;
-
-        try {
-            const data = JSON.parse(rawData);
-            new Chart(canvas, {
-                type: 'line',
-                data: {
-                    labels: data.labels || [],
-                    datasets: [{
-                        label: 'Performance',
-                        data: data.values || [],
-                        borderColor: '#F5A623',
-                        backgroundColor: 'rgba(245, 166, 35, 0.12)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4,
-                        pointBackgroundColor: '#F5A623',
-                        pointRadius: 5,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: ctx => ctx.parsed.y
-                            }
-                        }
-                    },
-                    scales: {
-                        y: {
-                            reverse: data.reverse || false, // lower is better for times
-                            grid: { color: 'rgba(0,0,0,.06)' },
-                            ticks: { font: { family: 'Inter' } }
-                        },
-                        x: {
-                            grid: { display: false },
-                            ticks: { font: { family: 'Inter' } }
-                        }
-                    }
-                }
-            });
-        } catch (err) {
-            console.warn('XFTC Chart init failed:', err);
-        }
-    }
-    initResultsChart();
+    // Results chart (#ts-results-chart) is initialized by the ts-membership
+    // plugin's public.js, which owns the shortcode-rendered canvas and its
+    // data — do not duplicate that here (two `new Chart()` calls on the same
+    // canvas throws "Canvas is already in use").
 
     // ── Print button (results/roster pages) ─────────────────────────────────
     document.querySelectorAll('[data-print]').forEach(btn => {

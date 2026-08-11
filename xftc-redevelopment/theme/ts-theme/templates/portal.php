@@ -38,6 +38,9 @@ if ( ! is_user_logged_in() ) {
                 <div class="portal-tab" data-tab="results">Results</div>
                 <div class="portal-tab" data-tab="payments">Payments</div>
                 <div class="portal-tab" data-tab="travel">Travel</div>
+                <?php if ( class_exists( 'WooCommerce' ) ) : ?>
+                <div class="portal-tab" data-tab="orders">Store Orders</div>
+                <?php endif; ?>
             </div>
 
             <div id="tab-athletes">
@@ -59,6 +62,12 @@ if ( ! is_user_logged_in() ) {
             <div id="tab-travel" style="display:none;">
                 <?php echo do_shortcode( '[TRACKSUITE_my_travel]' ); ?>
             </div>
+
+            <?php if ( class_exists( 'WooCommerce' ) ) : ?>
+            <div id="tab-orders" style="display:none;">
+                <?php echo do_shortcode( '[TRACKSUITE_my_orders]' ); ?>
+            </div>
+            <?php endif; ?>
 
         </div>
     </section>

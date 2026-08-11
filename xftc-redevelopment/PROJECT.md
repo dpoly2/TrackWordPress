@@ -1,36 +1,37 @@
 ﻿# Project: Xtreme Force Track Club — Full Website Redevelopment
 
 ## Status
-🟡 Active — Discovery & Planning Phase
+🟡 Active — Core plugin/theme functional; production deployment and Stripe live keys pending.
 
-## Agent
-**wordpresspluginsagent** — Lead developer
-**web_dev_researcher** — Audit, research, and technical validation
-**wordpressagent** — Deployment and site maintenance
+Sprints 1 and 2 are complete (see `SPRINT-1.md`/`SPRINT-2.md`). A subsequent completion pass fixed
+the plugin's activation-blocking bugs found in review (see plugin `README.md` for the current,
+accurate state), finished the Sprint 3 backlog, and extended the platform to the remaining
+`PROPOSAL.md` scope: a WooCommerce merchandise store, GDPR-style data export/erase support, and
+white-label packaging (first-run setup wizard) for reuse by other clubs.
 
 ## Timeline
 | Phase | Duration | Status |
 |-------|----------|--------|
-| Discovery & Design | Weeks 1–2 | 🟡 In Progress |
-| Development Sprint 1 | Weeks 3–6 | ⬜ Pending |
-| Development Sprint 2 | Weeks 7–10 | ⬜ Pending |
-| Testing & Validation | Week 11 | ⬜ Pending |
-| Deployment & Training | Week 12 | ⬜ Pending |
+| Discovery & Design | Weeks 1–2 | ✅ Complete |
+| Development Sprint 1 | Weeks 3–6 | ✅ Complete |
+| Development Sprint 2 | Weeks 7–10 | ✅ Complete |
+| Sprint 3 + full-scope completion pass | — | ✅ Complete (code) — not yet verified on a live WordPress install |
+| Testing & Validation | — | 🟡 Automated tests added; needs a real WP/MySQL run and manual QA |
+| Deployment & Training | — | ⬜ Pending |
 
 ## Repositories
 - **GitHub Repo:** dpoly2/AgentHarness
 - **Project Path:** projects/ts-redevelopment/
-- **Plugin Path:** projects/ts-redevelopment/plugin/ (to be created in Sprint 1)
-- **Theme Path:** projects/ts-redevelopment/theme/ (to be created in Sprint 1)
+- **Plugin Path:** `plugin/ts-membership/`
+- **Theme Path:** `theme/ts-theme/`
 
 ## Key Docs
 - `PROJECT.md` — This file
-- `PROPOSAL.md` — Full redevelopment proposal
+- `PROPOSAL.md` — Full redevelopment proposal (also serves as the functional-requirements reference — no separate REQUIREMENTS.md exists)
 - `ARCHITECTURE.md` — Technical architecture and DB schema
-- `REQUIREMENTS.md` — Detailed functional requirements by module
-- `SPRINT-1.md` — Sprint 1 task breakdown
-- `plugin/` — Custom plugin source (PHP)
-- `theme/` — Custom child theme source
+- `SPRINT-1.md` / `SPRINT-2.md` — Sprint task breakdowns
+- `plugin/ts-membership/README.md` — Plugin architecture, shortcodes, AJAX/REST reference
+- `theme/ts-theme/README.md` — Theme structure and page templates
 
 ## Live Site
 - **URL:** https://xtremeforcetrackclub.org
@@ -39,8 +40,8 @@
 - **API Base:** https://xtremeforcetrackclub.org/wp-json/wp/v2
 
 ## Notes
-- Base theme: Grace Themes Sports Club
-- Must retain and migrate all existing content
-- Plugin designed to be reusable for other AAU clubs (SaaS potential)
-- Mobile-first, WooCommerce integrated
+- The theme is a standalone custom theme (`ts-theme`), not a Grace Themes child theme.
+- Must retain and migrate all existing content.
+- Plugin includes a first-run setup wizard so it can be reused by other AAU clubs without code changes; a fully hosted multi-tenant SaaS platform (one install serving many clubs) remains a future initiative, not part of the current codebase.
+- Mobile-first. WooCommerce is an optional integration — the plugin degrades gracefully if it's not installed.
 

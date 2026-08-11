@@ -2,59 +2,109 @@
 /**
  * Plugin Name:       XFTC Membership
  * Plugin URI:        https://xtremeforcetrackclub.org/
- * Description:       Custom membership and athlete management system for Xtreme Force Track Club.
- * Version:           1.0.0
- * Author:            wordpresspluginsagent
- * Author URI:        https://dpoly2.github.io/AgentHarness/
+ * Description:       Complete membership management system for Xtreme Force Track Club — registration, seasons, meets, results, travel, payroll, payments, and store.
+ * Version:           2.0.0
+ * Author:            Xtreme Force Track Club
+ * Author URI:        https://xtremeforcetrackclub.org
  * License:           GPL-2.0+
  * License URI:       http://www.gnu.org/licenses/gpl-2.0.txt
  * Text Domain:       ts-membership
  * Domain Path:       /languages
  */
 
-// If this file is called directly, abort.
-if ( ! defined( 'WPINC' ) ) {
-    die;
+defined( 'ABSPATH' ) || exit;
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+define( 'TRACKSUITE_VERSION',     '2.0.0' );
+define( 'TRACKSUITE_PLUGIN_FILE', __FILE__ );
+define( 'TRACKSUITE_PLUGIN_DIR',  plugin_dir_path( __FILE__ ) );
+define( 'TRACKSUITE_PLUGIN_URL',  plugin_dir_url( __FILE__ ) );
+define( 'TRACKSUITE_PLUGIN_BASE', plugin_basename( __FILE__ ) );
+
+// ─── Activator / Deactivator must load immediately (before activation hook fires) ──
+require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-activator.php';
+require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-deactivator.php';
+
+// ─── Activation / Deactivation hooks ─────────────────────────────────────────
+register_activation_hook(   __FILE__, [ 'TRACKSUITE_Activator',   'activate'   ] );
+register_deactivation_hook( __FILE__, [ 'TRACKSUITE_Deactivator', 'deactivate' ] );
+
+// ─── Autoloader (for runtime class resolution) ────────────────────────────────
+spl_autoload_register( function ( $class ) {
+    if ( strncmp( 'TRACKSUITE_', $class, 11 ) !== 0 ) {
+        return;
+    }
+    $relative = strtolower( str_replace( [ 'TRACKSUITE_', '_' ], [ '', '-' ], $class ) );
+    $paths = [
+        TRACKSUITE_PLUGIN_DIR . "includes/class-ts-{$relative}.php",
+        TRACKSUITE_PLUGIN_DIR . "admin/class-ts-{$relative}.php",
+        TRACKSUITE_PLUGIN_DIR . "public/class-ts-{$relative}.php",
+        TRACKSUITE_PLUGIN_DIR . "api/class-ts-{$relative}.php",
+    ];
+    foreach ( $paths as $path ) {
+        if ( file_exists( $path ) ) {
+            require_once $path;
+            return;
+        }
+    }
+} );
+
+// ─── Bootstrap (runs after all plugins are loaded) ───────────────────────────
+function TRACKSUITE_run() {
+    // Pick up schema changes (e.g. new UNIQUE keys) on existing installs.
+    TRACKSUITE_Activator::maybe_upgrade();
+
+    // Core includes
+    require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-roles.php';
+    require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-members.php';
+    require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-seasons.php';
+    require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-registration.php';
+    require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-emails.php';
+    require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-meets.php';
+    require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-results.php';
+    require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-travel.php';
+    require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-payroll.php';
+    require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-payments.php';
+    require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-reports.php';
+    require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-privacy.php';
+
+    // Admin & public layers
+    require_once TRACKSUITE_PLUGIN_DIR . 'admin/class-ts-admin.php';
+    require_once TRACKSUITE_PLUGIN_DIR . 'admin/class-ts-dashboard-widgets.php';
+    require_once TRACKSUITE_PLUGIN_DIR . 'public/class-ts-public.php';
+
+    // REST API
+    require_once TRACKSUITE_PLUGIN_DIR . 'api/class-ts-rest-api.php';
+
+    // Optional WooCommerce store integration
+    if ( class_exists( 'WooCommerce' ) ) {
+        require_once TRACKSUITE_PLUGIN_DIR . 'includes/class-ts-woocommerce.php';
+        ( new TRACKSUITE_WooCommerce() )->init();
+    }
+
+    // Init roles
+    $roles = new TRACKSUITE_Roles();
+    $roles->init();
+
+    // Init registration AJAX handlers
+    $registration = new TRACKSUITE_Registration();
+    $registration->init();
+
+    // Init privacy (GDPR export/erase hooks, retention cron, SSL notice)
+    $privacy = new TRACKSUITE_Privacy();
+    $privacy->init();
+
+    // Init REST API
+    new TRACKSUITE_REST_API();
+
+    // Init admin (class-ts-dashboard-widgets.php self-registers its hook on require)
+    if ( is_admin() ) {
+        $admin = new TRACKSUITE_Admin();
+        $admin->init();
+    }
+
+    // Init public
+    $public = new TRACKSUITE_Public();
+    $public->init();
 }
-
-/**
- * Currently plugin version.
- * Start at version 1.0.0 and update it as soon as you release a new version.
- */
-define( 'TS_MEMBERSHIP_VERSION', '1.0.0' );
-
-/**
- * The core plugin class that is used to define internationalization,
- * admin-specific hooks, and public-facing hooks.
- */
-require_once plugin_dir_path( __FILE__ ) . 'includes/class-ts-membership.php';
-
-/**
- * Begins execution of the plugin.
- *
- * Since everything within the plugin is registered via hooks,
- * then there isn't any need to explicitly call any action or filter hook.
- *
- * @since    1.0.0
- */
-function run_ts_membership() {
-
-    $plugin = new TS_Membership();
-    $plugin->run();
-
-}
-run_ts_membership();
-
-// Activation hook
-function activate_ts_membership() {
-    require_once plugin_dir_path( __FILE__ ) . 'includes/class-ts-activator.php';
-    TS_Activator::activate();
-}
-register_activation_hook( __FILE__, 'activate_ts_membership' );
-
-// Deactivation hook
-function deactivate_ts_membership() {
-    require_once plugin_dir_path( __FILE__ ) . 'includes/class-ts-deactivator.php';
-    TS_Deactivator::deactivate();
-}
-register_deactivation_hook( __FILE__, 'deactivate_ts_membership' );
+add_action( 'plugins_loaded', 'TRACKSUITE_run' );

@@ -3,9 +3,10 @@
  * Site Footer partial
  * @package TRACKSUITE_Theme
  */
+$club_name = get_option( 'TRACKSUITE_club_name', get_bloginfo( 'name' ) ?: 'Your Club' );
 $phone     = get_theme_mod( 'TRACKSUITE_phone',     '' );
-$email     = get_theme_mod( 'TRACKSUITE_email',     'info@xtremeforcetrackclub.org' );
-$address   = get_theme_mod( 'TRACKSUITE_address',   'Austin / Pflugerville, TX' );
+$email     = get_theme_mod( 'TRACKSUITE_email',     get_option( 'TRACKSUITE_admin_email', '' ) );
+$address   = get_theme_mod( 'TRACKSUITE_address',   '' );
 $facebook  = get_theme_mod( 'TRACKSUITE_facebook',  '' );
 $instagram = get_theme_mod( 'TRACKSUITE_instagram', '' );
 $twitter   = get_theme_mod( 'TRACKSUITE_twitter',   '' );
@@ -40,12 +41,12 @@ $youtube   = get_theme_mod( 'TRACKSUITE_youtube',   '' );
                     <?php the_custom_logo(); ?>
                 <?php else : ?>
                     <div class="site-title" style="font-size:1.3rem;margin-bottom:.75rem;">
-                        XTREME <span style="color:var(--ts-gold)">FORCE</span>
+                        <?php echo esc_html( $club_name ); ?>
                     </div>
                 <?php endif; ?>
 
                 <p class="footer-brand__desc">
-                    <?php echo esc_html( get_bloginfo( 'description' ) ?: 'Developing champion athletes and future leaders. AAU-registered. Austin & Pflugerville, TX.' ); ?>
+                    <?php echo esc_html( get_bloginfo( 'description' ) ?: sprintf( 'Developing champion athletes and future leaders — %s.', $club_name ) ); ?>
                 </p>
 
                 <?php if ( $address ) : ?><p style="font-size:.8rem;opacity:.6;margin-top:.5rem;">📍 <?php echo esc_html( $address ); ?></p><?php endif; ?>
@@ -120,16 +121,8 @@ $youtube   = get_theme_mod( 'TRACKSUITE_youtube',   '' );
 
         <div class="site-footer__bottom">
             <span>
-                &copy; <?php echo date( 'Y' ); ?> <?php bloginfo( 'name' ); ?>.
+                &copy; <?php echo esc_html( date( 'Y' ) ); ?> <?php bloginfo( 'name' ); ?>.
                 <?php esc_html_e( 'All rights reserved.', 'ts-theme' ); ?>
-            </span>
-            <span>
-                <?php
-                printf(
-                    esc_html__( 'Built by %s', 'ts-theme' ),
-                    '<a href="https://xtremeforcetrackclub.org" style="color:var(--ts-gold)">XFTC Tech</a>'
-                );
-                ?>
             </span>
         </div>
 

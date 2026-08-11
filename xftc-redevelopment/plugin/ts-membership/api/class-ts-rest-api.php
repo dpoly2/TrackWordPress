@@ -107,32 +107,56 @@ class TRACKSUITE_REST_API {
 
     public function get_athletes( \WP_REST_Request $req ): \WP_REST_Response {
         $members = new TRACKSUITE_Members();
-        return new \WP_REST_Response( $members->get_all_members(), 200 );
+        return new \WP_REST_Response( $members->get_all(), 200 );
     }
 
     public function create_athlete( \WP_REST_Request $req ): \WP_REST_Response {
         $members = new TRACKSUITE_Members();
-        $id = $members->create_member( $req->get_json_params() );
-        if ( ! $id ) return new \WP_REST_Response( [ 'error' => 'Could not create athlete.' ], 400 );
+        $data    = $req->get_json_params();
+
+        // Non-admins can only create athletes under their own account, regardless
+        // of what parent_id the client sends.
+        if ( ! $this->require_admin() ) {
+            $data['parent_id'] = get_current_user_id();
+        }
+
+        $id = $members->create( $data );
+        if ( is_wp_error( $id ) || ! $id ) {
+            return new \WP_REST_Response( [ 'error' => is_wp_error( $id ) ? $id->get_error_message() : 'Could not create athlete.' ], 400 );
+        }
         return new \WP_REST_Response( [ 'id' => $id ], 201 );
     }
 
     public function get_athlete( \WP_REST_Request $req ): \WP_REST_Response {
         $members = new TRACKSUITE_Members();
-        $athlete = $members->get_member( (int) $req['id'] );
+        $athlete = $members->get( (int) $req['id'] );
         if ( ! $athlete ) return new \WP_REST_Response( [ 'error' => 'Not found.' ], 404 );
+        if ( ! $this->owns_athlete_or_admin( $athlete ) ) {
+            return new \WP_REST_Response( [ 'error' => 'You do not have permission to view this athlete.' ], 403 );
+        }
         return new \WP_REST_Response( $athlete, 200 );
     }
 
     public function update_athlete( \WP_REST_Request $req ): \WP_REST_Response {
         $members = new TRACKSUITE_Members();
-        $updated = $members->update_member( (int) $req['id'], $req->get_json_params() );
+        $athlete = $members->get( (int) $req['id'] );
+        if ( ! $athlete ) return new \WP_REST_Response( [ 'error' => 'Not found.' ], 404 );
+        if ( ! $this->owns_athlete_or_admin( $athlete ) ) {
+            return new \WP_REST_Response( [ 'error' => 'You do not have permission to update this athlete.' ], 403 );
+        }
+        $updated = $members->update( (int) $req['id'], $req->get_json_params() );
         return new \WP_REST_Response( [ 'updated' => $updated ], $updated ? 200 : 400 );
     }
 
     public function get_athlete_stats( \WP_REST_Request $req ): \WP_REST_Response {
-        $results = new TRACKSUITE_Results();
         $id      = (int) $req['id'];
+        $members = new TRACKSUITE_Members();
+        $athlete = $members->get( $id );
+        if ( ! $athlete ) return new \WP_REST_Response( [ 'error' => 'Not found.' ], 404 );
+        if ( ! $this->owns_athlete_or_admin( $athlete ) && ! current_user_can( 'TRACKSUITE_coach' ) ) {
+            return new \WP_REST_Response( [ 'error' => 'You do not have permission to view these stats.' ], 403 );
+        }
+        $results = new TRACKSUITE_Results();
         return new \WP_REST_Response( [
             'athlete_id'    => $id,
             'all_results'   => $results->get_athlete_results( $id ),
@@ -145,13 +169,15 @@ class TRACKSUITE_REST_API {
 
     public function get_seasons( \WP_REST_Request $req ): \WP_REST_Response {
         $seasons = new TRACKSUITE_Seasons();
-        return new \WP_REST_Response( $seasons->get_all_seasons(), 200 );
+        return new \WP_REST_Response( $seasons->get_all(), 200 );
     }
 
     public function create_season( \WP_REST_Request $req ): \WP_REST_Response {
         $seasons = new TRACKSUITE_Seasons();
-        $id = $seasons->create_season( $req->get_json_params() );
-        if ( ! $id ) return new \WP_REST_Response( [ 'error' => 'Could not create season.' ], 400 );
+        $id = $seasons->create( $req->get_json_params() );
+        if ( is_wp_error( $id ) || ! $id ) {
+            return new \WP_REST_Response( [ 'error' => is_wp_error( $id ) ? $id->get_error_message() : 'Could not create season.' ], 400 );
+        }
         return new \WP_REST_Response( [ 'id' => $id ], 201 );
     }
 
@@ -184,9 +210,19 @@ class TRACKSUITE_REST_API {
     }
 
     public function register_for_meet( \WP_REST_Request $req ): \WP_REST_Response {
-        $meets  = new TRACKSUITE_Meets();
-        $params = $req->get_json_params();
-        $id     = $meets->register_athlete( (int) $req['id'], (int) $params['athlete_id'], $params );
+        $params     = $req->get_json_params();
+        $athlete_id = (int) ( $params['athlete_id'] ?? 0 );
+
+        if ( ! $this->require_admin() ) {
+            $members = new TRACKSUITE_Members();
+            $athlete = $members->get( $athlete_id );
+            if ( ! $athlete || (int) $athlete->parent_id !== get_current_user_id() ) {
+                return new \WP_REST_Response( [ 'error' => 'You do not have permission to register this athlete.' ], 403 );
+            }
+        }
+
+        $meets = new TRACKSUITE_Meets();
+        $id    = $meets->register_athlete( (int) $req['id'], $athlete_id, $params );
         if ( ! $id ) return new \WP_REST_Response( [ 'error' => 'Registration failed.' ], 400 );
         return new \WP_REST_Response( [ 'entry_id' => $id ], 201 );
     }
@@ -222,15 +258,42 @@ class TRACKSUITE_REST_API {
     public function get_travel( \WP_REST_Request $req ): \WP_REST_Response {
         $travel  = new TRACKSUITE_Travel();
         $meet_id = (int) $req->get_param( 'meet_id' );
-        $data    = $meet_id
-            ? $travel->get_meet_travel( $meet_id )
-            : $travel->get_athlete_travel( get_current_user_id() );
+
+        if ( $meet_id ) {
+            // Full per-meet roster (seat/room assignments for every athlete) is
+            // organizer-only — a parent has no business seeing other families' bookings.
+            if ( ! $this->require_coach_or_admin() ) {
+                return new \WP_REST_Response( [ 'error' => 'You do not have permission to view this meet\'s travel roster.' ], 403 );
+            }
+            return new \WP_REST_Response( $travel->get_meet_travel( $meet_id ), 200 );
+        }
+
+        // No meet_id: return travel bookings for the current parent's own athletes.
+        // (get_current_user_id() is a WP user id, not an athlete id — must resolve
+        // via TRACKSUITE_Members::get_by_parent() first.)
+        $members  = new TRACKSUITE_Members();
+        $athletes = $members->get_by_parent( get_current_user_id() );
+        $data     = [];
+        foreach ( $athletes as $athlete ) {
+            $data = array_merge( $data, $travel->get_athlete_travel( (int) $athlete->id ) );
+        }
         return new \WP_REST_Response( $data, 200 );
     }
 
     public function book_travel( \WP_REST_Request $req ): \WP_REST_Response {
+        $params = $req->get_json_params();
+
+        // Non-admins may only book travel for their own athletes.
+        if ( ! $this->require_admin() ) {
+            $members = new TRACKSUITE_Members();
+            $athlete = $members->get( (int) ( $params['athlete_id'] ?? 0 ) );
+            if ( ! $athlete || (int) $athlete->parent_id !== get_current_user_id() ) {
+                return new \WP_REST_Response( [ 'error' => 'You do not have permission to book travel for this athlete.' ], 403 );
+            }
+        }
+
         $travel = new TRACKSUITE_Travel();
-        $id     = $travel->create_booking( $req->get_json_params() );
+        $id     = $travel->create_booking( $params );
         if ( ! $id ) return new \WP_REST_Response( [ 'error' => 'Booking failed.' ], 400 );
         return new \WP_REST_Response( [ 'booking_id' => $id ], 201 );
     }
@@ -270,9 +333,13 @@ class TRACKSUITE_REST_API {
     /** ─── REPORT HANDLER ────────────────────────────────────── */
 
     public function get_report( \WP_REST_Request $req ): \WP_REST_Response {
-        $type = sanitize_key( $req['type'] );
-        // TODO: Wire to class-ts-reports.php (Sprint 3)
-        return new \WP_REST_Response( [ 'report' => $type, 'status' => 'coming in Sprint 3' ], 200 );
+        $type    = sanitize_key( $req['type'] );
+        $reports = new TRACKSUITE_Reports();
+        $result  = $reports->get( $type );
+        if ( is_wp_error( $result ) ) {
+            return new \WP_REST_Response( [ 'error' => $result->get_error_message() ], 404 );
+        }
+        return new \WP_REST_Response( [ 'report' => $type, 'data' => $result ], 200 );
     }
 
     /** ─── PERMISSION CALLBACKS ──────────────────────────────── */
@@ -295,6 +362,21 @@ class TRACKSUITE_REST_API {
 
     public function require_admin(): bool {
         return current_user_can( 'TRACKSUITE_admin' ) || current_user_can( 'administrator' );
+    }
+
+    /**
+     * True if the current user is the athlete's parent, or an admin.
+     * Used to prevent one parent from reading/editing another parent's
+     * athlete records by guessing/incrementing the numeric id (IDOR).
+     *
+     * @param object|array $athlete Row from TRACKSUITE_Members::get() — must expose parent_id.
+     */
+    private function owns_athlete_or_admin( $athlete ): bool {
+        if ( $this->require_admin() ) {
+            return true;
+        }
+        $parent_id = is_array( $athlete ) ? ( $athlete['parent_id'] ?? 0 ) : ( $athlete->parent_id ?? 0 );
+        return (int) $parent_id === get_current_user_id();
     }
 }
 

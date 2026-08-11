@@ -3,7 +3,7 @@
          colors="true"
          verbose="true">
     <testsuites>
-        <testsuite name="xftc-membership">
+        <testsuite name="ts-membership">
             <directory>tests</directory>
         </testsuite>
     </testsuites>

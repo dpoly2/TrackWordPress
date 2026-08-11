@@ -18,6 +18,23 @@ class TRACKSUITE_Activator {
         self::create_tables();
         self::set_default_options();
         flush_rewrite_rules();
+
+        if ( '1' !== get_option( 'TRACKSUITE_setup_wizard_complete' ) ) {
+            set_transient( 'TRACKSUITE_activation_redirect', 1, 30 );
+        }
+    }
+
+    /**
+     * Re-run dbDelta if the plugin has been upgraded since the tables were
+     * last created — dbDelta is additive/idempotent (it only adds missing
+     * columns/keys), so this is safe to call on every `plugins_loaded` and
+     * is how existing installs pick up schema changes like the UNIQUE keys
+     * added below without a separate manual migration step.
+     */
+    public static function maybe_upgrade() {
+        if ( get_option( 'TRACKSUITE_db_version' ) !== TRACKSUITE_VERSION ) {
+            self::create_tables();
+        }
     }
 
     /**
@@ -78,7 +95,8 @@ class TRACKSUITE_Activator {
             updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             KEY athlete_id (athlete_id),
-            KEY season_id (season_id)
+            KEY season_id (season_id),
+            UNIQUE KEY athlete_season (athlete_id, season_id)
         ) $charset;";
 
         // ── Meets ─────────────────────────────────────────────────────────────
@@ -107,7 +125,8 @@ class TRACKSUITE_Activator {
             registered_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             KEY meet_id (meet_id),
-            KEY athlete_id (athlete_id)
+            KEY athlete_id (athlete_id),
+            UNIQUE KEY meet_athlete_event (meet_id, athlete_id, event_category)
         ) $charset;";
 
         // ── Results ───────────────────────────────────────────────────────────
@@ -142,7 +161,8 @@ class TRACKSUITE_Activator {
             registered_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
             KEY meet_id (meet_id),
-            KEY athlete_id (athlete_id)
+            KEY athlete_id (athlete_id),
+            UNIQUE KEY meet_athlete (meet_id, athlete_id)
         ) $charset;";
 
         // ── Staff ─────────────────────────────────────────────────────────────
@@ -202,11 +222,22 @@ class TRACKSUITE_Activator {
      * Set default plugin options on first activation.
      */
     private static function set_default_options() {
-        add_option( 'TRACKSUITE_stripe_mode',       'test' );
-        add_option( 'TRACKSUITE_stripe_public_key', '' );
-        add_option( 'TRACKSUITE_stripe_secret_key', '' );
-        add_option( 'TRACKSUITE_admin_email',       get_option( 'admin_email' ) );
-        add_option( 'TRACKSUITE_club_name',         'Xtreme Force Track Club' );
+        add_option( 'TRACKSUITE_admin_email', get_option( 'admin_email' ) );
+        add_option( 'TRACKSUITE_club_name',   'Xtreme Force Track Club' );
+
+        add_option( 'TRACKSUITE_stripe_test_mode',            1 );
+        add_option( 'TRACKSUITE_stripe_test_publishable_key', '' );
+        add_option( 'TRACKSUITE_stripe_test_secret_key',      '' );
+        add_option( 'TRACKSUITE_stripe_live_publishable_key', '' );
+        add_option( 'TRACKSUITE_stripe_live_secret_key',      '' );
+        add_option( 'TRACKSUITE_stripe_webhook_secret',       '' );
+
+        add_option( 'TRACKSUITE_travel_fee_bus',   25.00 );
+        add_option( 'TRACKSUITE_travel_fee_hotel', 75.00 );
+
+        add_option( 'TRACKSUITE_data_retention_years',        3 );
+        add_option( 'TRACKSUITE_delete_data_on_uninstall',    '0' );
+        add_option( 'TRACKSUITE_setup_wizard_complete',       '0' );
     }
 }
 

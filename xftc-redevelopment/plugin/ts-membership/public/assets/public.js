@@ -241,13 +241,13 @@
         });
     }
 
-    // Load Chart.js on demand for results pages
+    // Load Chart.js on demand for results pages (self-hosted — see class-ts-public.php)
     if (document.getElementById('ts-results-chart')) {
         if (typeof Chart !== 'undefined') {
             initResultsChart();
         } else {
             const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js';
+            script.src = xftcPublic.chartJsUrl;
             script.onload = initResultsChart;
             document.head.appendChild(script);
         }
@@ -276,6 +276,29 @@
                     initResultsChart();
                 }
             }
+        });
+    });
+
+    // ── Staff Portal: Enter Result ────────────────────────────────────────────
+    $('#ts-staff-result-form').on('submit', function (e) {
+        e.preventDefault();
+        const $form = $(this);
+        const $fb   = $form.find('.ts-form__feedback');
+        const $btn  = $form.find('[type="submit"]');
+
+        $btn.prop('disabled', true).text('Saving…');
+
+        $.post(ajax, $form.serialize() + '&TRACKSUITE_nonce=' + nonce, function (res) {
+            if (res.success) {
+                showFeedback($fb, res.data.message, 'success');
+                $form[0].reset();
+            } else {
+                showFeedback($fb, res.data.message || 'Could not save result.', 'error');
+            }
+            $btn.prop('disabled', false).text('Save Result');
+        }).fail(function () {
+            showFeedback($fb, 'Server error. Please try again.', 'error');
+            $btn.prop('disabled', false).text('Save Result');
         });
     });
 

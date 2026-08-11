@@ -5,6 +5,7 @@
  */
 TRACKSUITE_partial( 'header' );
 
+$hero_eyebrow  = get_theme_mod( 'TRACKSUITE_hero_eyebrow',  'Austin &amp; Pflugerville, TX &bull; AAU Registered' );
 $hero_title    = get_theme_mod( 'TRACKSUITE_hero_title',    'Train Hard. Run <em>Fast</em>. Win.' );
 $hero_subtitle = get_theme_mod( 'TRACKSUITE_hero_subtitle', 'Xtreme Force Track Club — developing champion athletes and future leaders in Austin &amp; Pflugerville, TX.' );
 $hero_cta_text = get_theme_mod( 'TRACKSUITE_hero_cta_text', 'Register for 2026' );
@@ -19,7 +20,7 @@ $stats         = TRACKSUITE_get_hero_stats();
     <?php endif; ?>
 
     <div class="container hero__content">
-        <p class="hero__eyebrow">Austin &bull; Pflugerville &bull; Texas &bull; AAU Registered</p>
+        <p class="hero__eyebrow"><?php echo wp_kses_post( $hero_eyebrow ); ?></p>
         <h1 class="hero__title"><?php echo wp_kses_post( $hero_title ); ?></h1>
         <p class="hero__subtitle"><?php echo wp_kses_post( $hero_subtitle ); ?></p>
         <div class="hero__actions">
@@ -95,7 +96,7 @@ $stats         = TRACKSUITE_get_hero_stats();
     <div class="container" style="display:flex;align-items:center;justify-content:space-between;gap:1.5rem;flex-wrap:wrap;">
         <div>
             <h2 style="font-family:var(--font-heading);font-size:2rem;color:var(--ts-white);letter-spacing:.04em;">
-                Ready to Join <span style="color:var(--ts-gold)">Xtreme Force?</span>
+                Ready to Join <span style="color:var(--ts-gold)"><?php echo esc_html( get_option( 'TRACKSUITE_club_name', 'Xtreme Force' ) ); ?>?</span>
             </h2>
             <p style="color:var(--ts-gray-300);font-size:.95rem;">
                 Open registration — ages 6–18. Competitive and development divisions available.

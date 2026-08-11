@@ -107,22 +107,29 @@ class TRACKSUITE_Meets {
 
     public function register_athlete( int $meet_id, int $athlete_id, array $data = [] ): int|false {
         global $wpdb;
-        // Check for duplicate
-        $exists = $wpdb->get_var( $wpdb->prepare(
-            "SELECT id FROM {$this->entries_table} WHERE meet_id = %d AND athlete_id = %d AND event_category = %s",
-            $meet_id, $athlete_id, $data['event_category'] ?? ''
-        ) );
-        if ( $exists ) return (int) $exists;
+        $event_category = sanitize_text_field( $data['event_category'] ?? '' );
 
+        // The UNIQUE KEY meet_athlete_event (see class-ts-activator.php) is what
+        // actually prevents duplicate entries under concurrent requests; this is
+        // just how we turn that DB-level rejection into "return the existing row".
         $inserted = $wpdb->insert( $this->entries_table, [
             'meet_id'        => $meet_id,
             'athlete_id'     => $athlete_id,
-            'event_category' => sanitize_text_field( $data['event_category'] ?? '' ),
+            'event_category' => $event_category,
             'division'       => sanitize_text_field( $data['division'] ?? '' ),
             'waiver_uploaded'=> 0,
             'registered_at'  => current_time( 'mysql' ),
         ] );
-        return $inserted ? $wpdb->insert_id : false;
+
+        if ( $inserted ) {
+            return (int) $wpdb->insert_id;
+        }
+
+        $existing = $wpdb->get_var( $wpdb->prepare(
+            "SELECT id FROM {$this->entries_table} WHERE meet_id = %d AND athlete_id = %d AND event_category = %s",
+            $meet_id, $athlete_id, $event_category
+        ) );
+        return $existing ? (int) $existing : false;
     }
 
     public function update_waiver( int $entry_id, bool $uploaded ): bool {

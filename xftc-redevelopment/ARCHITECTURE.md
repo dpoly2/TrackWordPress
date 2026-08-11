@@ -5,12 +5,12 @@
 | Layer | Technology |
 |-------|-----------|
 | CMS | WordPress (latest) |
-| Theme | Grace Themes Sports Club (customized child theme) |
+| Theme | Custom standalone theme — `ts-theme` (not a Grace Themes child theme; see [theme README](theme/ts-theme/README.md)) |
 | Plugin | Custom PHP plugin — `ts-membership` |
-| E-commerce | WooCommerce |
-| Payments | Stripe (primary), PayPal (secondary) |
-| Database | MySQL via wpdb + custom tables |
-| Frontend | HTML5/CSS3, jQuery, Chart.js |
+| E-commerce | WooCommerce (optional — active only if installed; see `includes/class-ts-woocommerce.php`) |
+| Payments | Stripe (implemented). The `payments` table's `gateway` column also reserves a `paypal` value for a future integration — not implemented today. |
+| Database | MySQL via wpdb + custom tables (prefix `TRACKSUITE_`, e.g. `wp_TRACKSUITE_athletes`) |
+| Frontend | HTML5/CSS3, jQuery, Chart.js (self-hosted, loaded on demand) |
 | API | WP REST API (custom endpoints under `/wp-json/xftc/v1/`) |
 | Version Control | GitHub — dpoly2/AgentHarness |
 
@@ -20,31 +20,36 @@
 
 ```
 ts-membership/
-├── ts-membership.php          # Main plugin file — bootstrap, hooks
+├── ts-membership.php          # Main plugin file — bootstrap, hooks (the ONLY entry point)
+├── uninstall.php              # Runs on plugin deletion — removes roles/options, optionally data
 ├── includes/
-│   ├── class-ts-activator.php     # Activation — create DB tables
+│   ├── class-ts-activator.php     # Activation + upgrade — create/alter DB tables
 │   ├── class-ts-deactivator.php   # Deactivation cleanup
 │   ├── class-ts-roles.php         # Custom user roles & capabilities
 │   ├── class-ts-members.php       # Member CRUD
 │   ├── class-ts-seasons.php       # Season management
-│   ├── class-ts-registration.php  # Registration flow
+│   ├── class-ts-registration.php  # Registration flow + membership creation
 │   ├── class-ts-travel.php        # Travel/bus/hotel management
 │   ├── class-ts-meets.php         # Meet creation & management
 │   ├── class-ts-results.php       # Result input & performance stats
-│   ├── class-ts-payments.php      # Stripe/PayPal integration
+│   ├── class-ts-payments.php      # Stripe integration (checkout, webhook, manual entry)
 │   ├── class-ts-payroll.php       # Staff payroll system
-│   ├── class-ts-reports.php       # Reporting engine
+│   ├── class-ts-reports.php       # Reporting engine (registration/financial/performance)
+│   ├── class-ts-privacy.php       # GDPR export/erase hooks, retention cron, SSL notice
+│   ├── class-ts-woocommerce.php   # Optional store integration — loaded only if WooCommerce is active
 │   └── class-ts-emails.php        # Transactional email system
 ├── admin/
 │   ├── class-ts-admin.php         # Admin menu & dashboard
-│   ├── views/                        # Admin page templates
+│   ├── class-ts-dashboard-widgets.php # WP Admin dashboard widgets
+│   ├── views/                        # Admin page templates (incl. setup-wizard.php)
 │   └── assets/                       # Admin CSS/JS
 ├── public/
-│   ├── class-ts-public.php        # Shortcodes, front-end hooks
-│   ├── views/                        # Front-end templates
-│   └── assets/                       # Public CSS/JS (Chart.js, etc.)
+│   ├── class-ts-public.php        # Shortcodes, front-end hooks, AJAX handlers
+│   ├── views/                        # Front-end templates (incl. staff-portal.php)
+│   └── assets/                       # Public CSS/JS + self-hosted Chart.js
 ├── api/
 │   └── class-ts-rest-api.php      # Custom REST endpoints
+├── tests/                         # PHPUnit suite — loads the real plugin bootstrap
 └── languages/                        # i18n files
 ```
 
@@ -52,9 +57,9 @@ ts-membership/
 
 ## Database Schema
 
-### wp_ts_athletes
+### wp_TRACKSUITE_athletes
 ```sql
-CREATE TABLE wp_ts_athletes (
+CREATE TABLE wp_TRACKSUITE_athletes (
   id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   parent_id     BIGINT UNSIGNED NOT NULL,          -- FK: wp_users.ID
   first_name    VARCHAR(100) NOT NULL,
@@ -70,9 +75,9 @@ CREATE TABLE wp_ts_athletes (
 );
 ```
 
-### wp_ts_seasons
+### wp_TRACKSUITE_seasons
 ```sql
-CREATE TABLE wp_ts_seasons (
+CREATE TABLE wp_TRACKSUITE_seasons (
   id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name          VARCHAR(100) NOT NULL,             -- e.g. "2026 Outdoor"
   type          ENUM('indoor','outdoor','summer','fall'),
@@ -87,9 +92,9 @@ CREATE TABLE wp_ts_seasons (
 );
 ```
 
-### wp_ts_memberships
+### wp_TRACKSUITE_memberships
 ```sql
-CREATE TABLE wp_ts_memberships (
+CREATE TABLE wp_TRACKSUITE_memberships (
   id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   athlete_id    BIGINT UNSIGNED NOT NULL,
   season_id     BIGINT UNSIGNED NOT NULL,
@@ -99,13 +104,14 @@ CREATE TABLE wp_ts_memberships (
   amount_due    DECIMAL(10,2),
   amount_paid   DECIMAL(10,2) DEFAULT 0.00,
   registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY athlete_season (athlete_id, season_id)  -- one membership per athlete per season
 );
 ```
 
-### wp_ts_meets
+### wp_TRACKSUITE_meets
 ```sql
-CREATE TABLE wp_ts_meets (
+CREATE TABLE wp_TRACKSUITE_meets (
   id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   name          VARCHAR(200) NOT NULL,
   meet_date     DATE,
@@ -119,22 +125,23 @@ CREATE TABLE wp_ts_meets (
 );
 ```
 
-### wp_ts_meet_entries
+### wp_TRACKSUITE_meet_entries
 ```sql
-CREATE TABLE wp_ts_meet_entries (
+CREATE TABLE wp_TRACKSUITE_meet_entries (
   id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   meet_id       BIGINT UNSIGNED NOT NULL,
   athlete_id    BIGINT UNSIGNED NOT NULL,
   event_category VARCHAR(100),
   division      VARCHAR(50),
   waiver_uploaded TINYINT(1) DEFAULT 0,
-  registered_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY meet_athlete_event (meet_id, athlete_id, event_category)
 );
 ```
 
-### wp_ts_results
+### wp_TRACKSUITE_results
 ```sql
-CREATE TABLE wp_ts_results (
+CREATE TABLE wp_TRACKSUITE_results (
   id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   meet_id       BIGINT UNSIGNED NOT NULL,
   athlete_id    BIGINT UNSIGNED NOT NULL,
@@ -149,9 +156,9 @@ CREATE TABLE wp_ts_results (
 );
 ```
 
-### wp_ts_travel
+### wp_TRACKSUITE_travel
 ```sql
-CREATE TABLE wp_ts_travel (
+CREATE TABLE wp_TRACKSUITE_travel (
   id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   meet_id       BIGINT UNSIGNED NOT NULL,
   athlete_id    BIGINT UNSIGNED NOT NULL,
@@ -161,13 +168,14 @@ CREATE TABLE wp_ts_travel (
   travel_fee    DECIMAL(10,2),
   payment_status ENUM('unpaid','paid','refunded'),
   notes         TEXT,
-  registered_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY meet_athlete (meet_id, athlete_id)
 );
 ```
 
-### wp_ts_staff
+### wp_TRACKSUITE_staff
 ```sql
-CREATE TABLE wp_ts_staff (
+CREATE TABLE wp_TRACKSUITE_staff (
   id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id       BIGINT UNSIGNED NOT NULL,          -- FK: wp_users.ID
   role          VARCHAR(100),
@@ -178,9 +186,9 @@ CREATE TABLE wp_ts_staff (
 );
 ```
 
-### wp_ts_payroll
+### wp_TRACKSUITE_payroll
 ```sql
-CREATE TABLE wp_ts_payroll (
+CREATE TABLE wp_TRACKSUITE_payroll (
   id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   staff_id      BIGINT UNSIGNED NOT NULL,
   period_start  DATE,
@@ -196,9 +204,9 @@ CREATE TABLE wp_ts_payroll (
 );
 ```
 
-### wp_ts_payments
+### wp_TRACKSUITE_payments
 ```sql
-CREATE TABLE wp_ts_payments (
+CREATE TABLE wp_TRACKSUITE_payments (
   id              BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id         BIGINT UNSIGNED NOT NULL,
   reference_type  ENUM('membership','travel','uniform','other'),
@@ -215,22 +223,33 @@ CREATE TABLE wp_ts_payments (
 
 ## REST API Endpoints
 
+"Parent (own)" below means the endpoint enforces that the requesting parent's user ID matches the athlete's `parent_id` (or the caller is an admin) — this ownership check is what actually gates access, not just the capability check.
+
 | Method | Endpoint | Description | Role Required |
 |--------|----------|-------------|---------------|
 | GET | /xftc/v1/athletes | List athletes | Admin, Coach |
-| POST | /xftc/v1/athletes | Create athlete | Parent, Admin |
+| POST | /xftc/v1/athletes | Create athlete | Parent (forced to own account), Admin |
 | GET | /xftc/v1/athletes/{id} | Get athlete | Parent (own), Admin |
 | PUT | /xftc/v1/athletes/{id} | Update athlete | Parent (own), Admin |
+| GET | /xftc/v1/athletes/{id}/stats | Get athlete stats | Parent (own), Coach, Admin |
 | GET | /xftc/v1/seasons | List seasons | Public |
 | POST | /xftc/v1/seasons | Create season | Admin |
 | GET | /xftc/v1/meets | List meets | Public |
 | POST | /xftc/v1/meets | Create meet | Coach, Admin |
-| POST | /xftc/v1/meets/{id}/register | Register athlete for meet | Parent, Admin |
+| GET | /xftc/v1/meets/{id} | Get meet | Public |
+| PUT | /xftc/v1/meets/{id} | Update meet | Coach, Admin |
+| POST | /xftc/v1/meets/{id}/register | Register athlete for meet | Parent (own athlete), Admin |
+| GET | /xftc/v1/meets/{id}/roster | Get meet roster | Coach, Admin |
 | POST | /xftc/v1/results | Enter results | Coach, Admin |
-| GET | /xftc/v1/athletes/{id}/stats | Get athlete stats | Athlete, Parent, Admin |
-| GET | /xftc/v1/reports/{type} | Generate report | Admin |
-| POST | /xftc/v1/payments/checkout | Initiate Stripe checkout | Parent |
-| POST | /xftc/v1/payments/webhook | Stripe webhook handler | System |
+| PUT | /xftc/v1/results/{id} | Update result | Coach, Admin |
+| DELETE | /xftc/v1/results/{id} | Delete result | Admin |
+| GET | /xftc/v1/travel | List own athletes' travel bookings | Authenticated (own only) |
+| GET | /xftc/v1/travel?meet_id={id} | Full per-meet travel roster | Coach, Admin |
+| POST | /xftc/v1/travel | Book travel | Parent (own athlete), Admin |
+| PUT/DELETE | /xftc/v1/travel/{id} | Update/cancel travel booking | Admin |
+| GET | /xftc/v1/reports/{type} | Generate report (`registration`\|`financial`\|`performance`) | Admin |
+| POST | /xftc/v1/payments/checkout | Initiate Stripe checkout for a membership/travel balance | Parent (own), Admin |
+| POST | /xftc/v1/payments/webhook | Stripe webhook handler (signature-verified) | System |
 
 ---
 

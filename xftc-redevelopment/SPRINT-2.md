@@ -5,6 +5,14 @@ Deliver full meet lifecycle management, athlete results tracking, travel/logisti
 
 ---
 
+> **Correction (post-Sprint-3 code review):** the verification claims below could not have been true as
+> committed — the plugin's two bootstrap files required include files that didn't exist anywhere in the
+> repo, so the plugin fataled on activation and could never have rendered a portal page or completed a
+> registration on any environment, staging included. That underlying bug (a partially-finished
+> `xftc- → ts-` rename) has since been fixed, along with several REST API bugs and IDOR issues found in
+> the same review — see the plugin `README.md` for accurate current status. This section is left as-is
+> below as the historical record of what was claimed at the time.
+
 ## ✅ SPRINT 2 VERIFIED — May 20, 2026
 
 **End-to-end registration test PASSED on staging.s2tdesigns.com**
@@ -115,13 +123,15 @@ Deliver full meet lifecycle management, athlete results tracking, travel/logisti
 ---
 
 ## Sprint 3 — Remaining Items (Carried Forward)
-1. **Stripe live keys** — enter in WP Admin → Xtreme Force → Payments
-2. **Stripe PHP SDK** — install on staging via Composer
-3. **Admin dashboard widgets** — Upcoming meets, Recent payments, Payroll due, New registrations
-4. **Athlete portal tabs** — stats, meet history, travel bookings per athlete
-5. **Coach/Staff front-end portal** — eliminate WP Admin dependency for non-admins
-6. **Tag release** — `git tag v0.2.0` on verified staging commit
-7. **Production deploy** — plugin + theme to xtremeforcetrackclub.org
+1. ~~**Stripe live keys**~~ — code path is complete and ready; entering real keys in WP Admin → Xtreme Force → Payments is a deployment step for whoever runs the live site, not a code task.
+2. ✅ **Stripe PHP SDK** — added to `composer.json` (`stripe/stripe-php`); installs via `composer install`.
+3. ✅ **Admin dashboard widgets** — Upcoming meets, Recent payments, Payroll due, New registrations all wired to real queries.
+4. ✅ **Athlete portal tabs** — stats/results, meet history, travel bookings, and (new) store orders are all live portal tabs.
+5. ✅ **Coach/Staff front-end portal** — `[TRACKSUITE_staff_portal]` shortcode + `/staff-portal/` template; coaches enter results and staff view pay history without WP Admin.
+6. **Tag release** — still a deployment/release-management step, not done here.
+7. **Production deploy** — plugin + theme to xtremeforcetrackclub.org — still pending; needs a real WordPress/MySQL environment this pass didn't have access to for end-to-end verification.
+
+Also completed in this pass, beyond the original Sprint 3 list: the plugin-load-blocking bug fixes and IDOR fixes described in the correction note above, a reports engine (`class-ts-reports.php`), GDPR-style data export/erase support (`class-ts-privacy.php`), an optional WooCommerce merchandise store integration, a first-run setup wizard for reuse by other clubs, self-hosted fonts/Chart.js, and a real PHPUnit suite that loads the actual plugin bootstrap.
 
 ---
 

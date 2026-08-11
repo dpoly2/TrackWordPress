@@ -54,12 +54,13 @@ add_action( 'after_setup_theme', 'TRACKSUITE_theme_setup' );
 
 // ─── Enqueue Scripts & Styles ─────────────────────────────────────────────────
 function TRACKSUITE_enqueue_assets() {
-    // Google Fonts
+    // Self-hosted fonts (replaces fonts.googleapis.com — no visitor data sent
+    // to Google before a cookie/consent notice has been shown).
     wp_enqueue_style(
         'ts-fonts',
-        'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap',
+        TRACKSUITE_THEME_URI . '/assets/css/fonts.css',
         [],
-        null
+        TRACKSUITE_THEME_VERSION
     );
 
     // Main stylesheet
@@ -79,18 +80,9 @@ function TRACKSUITE_enqueue_assets() {
         true
     );
 
-    // Pass data to JS
-    wp_localize_script( 'ts-theme', 'XFTC', [
-        'ajaxUrl'  => admin_url( 'admin-ajax.php' ),
-        'nonce'    => wp_create_nonce( 'TRACKSUITE_nonce' ),
-        'siteUrl'  => home_url(),
-        'themeUri' => TRACKSUITE_THEME_URI,
-    ] );
-
-    // Chart.js — only on results/stats pages
-    if ( is_page_template( 'templates/results.php' ) || is_page_template( 'templates/portal.php' ) ) {
-        wp_enqueue_script( 'chart-js', 'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js', [], '4.4.0', true );
-    }
+    // Chart.js is loaded on demand by the ts-membership plugin's public.js
+    // (only when a [TRACKSUITE_my_results]/[TRACKSUITE_results] shortcode
+    // actually renders a chart canvas) — not duplicated here.
 
     // Comment reply
     if ( is_singular() && comments_open() && get_option( 'thread_comments' ) ) {
@@ -101,7 +93,10 @@ add_action( 'wp_enqueue_scripts', 'TRACKSUITE_enqueue_assets' );
 
 // Editor styles
 function TRACKSUITE_editor_styles() {
-    add_editor_style( [ 'assets/css/editor.css', 'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap' ] );
+    // assets/css/editor.css never existed (add_editor_style() silently no-ops
+    // on a missing path) — self-hosted fonts.css is the only stylesheet this
+    // actually needs to pull in for now.
+    add_editor_style( [ 'assets/css/fonts.css' ] );
 }
 add_action( 'after_setup_theme', 'TRACKSUITE_editor_styles' );
 
@@ -154,7 +149,7 @@ function TRACKSUITE_customizer( $wp_customize ) {
 
     // Hero
     $wp_customize->add_section( 'TRACKSUITE_hero', [ 'title' => 'Homepage Hero', 'panel' => 'TRACKSUITE_brand' ] );
-    foreach ( [ 'TRACKSUITE_hero_title' => [ 'label' => 'Hero Title', 'default' => 'Train Hard. Run <em>Fast</em>. Win.' ], 'TRACKSUITE_hero_subtitle' => [ 'label' => 'Hero Subtitle', 'default' => 'Xtreme Force Track Club — developing champion athletes and future leaders in Austin & Pflugerville, TX.' ], 'TRACKSUITE_hero_cta_text' => [ 'label' => 'CTA Button Text', 'default' => 'Register Now' ], 'TRACKSUITE_hero_cta_url' => [ 'label' => 'CTA Button URL', 'default' => '/register' ] ] as $s => $args ) {
+    foreach ( [ 'TRACKSUITE_hero_eyebrow' => [ 'label' => 'Hero Eyebrow (location/tagline)', 'default' => 'Austin & Pflugerville, TX &bull; AAU Registered' ], 'TRACKSUITE_hero_title' => [ 'label' => 'Hero Title', 'default' => 'Train Hard. Run <em>Fast</em>. Win.' ], 'TRACKSUITE_hero_subtitle' => [ 'label' => 'Hero Subtitle', 'default' => 'Xtreme Force Track Club — developing champion athletes and future leaders in Austin & Pflugerville, TX.' ], 'TRACKSUITE_hero_cta_text' => [ 'label' => 'CTA Button Text', 'default' => 'Register Now' ], 'TRACKSUITE_hero_cta_url' => [ 'label' => 'CTA Button URL', 'default' => '/register' ] ] as $s => $args ) {
         $wp_customize->add_setting( $s, [ 'default' => $args['default'], 'sanitize_callback' => 'wp_kses_post' ] );
         $wp_customize->add_control( $s, [ 'label' => $args['label'], 'section' => 'TRACKSUITE_hero', 'type' => 'text' ] );
     }
@@ -219,10 +214,11 @@ function TRACKSUITE_get_announcements(): array {
 
     // Fallback
     if ( empty( $announcements ) ) {
+        $club_name = get_option( 'TRACKSUITE_club_name', get_bloginfo( 'name' ) ?: 'the club' );
         $announcements = [
-            '🏃 2026 Outdoor Season registration is now OPEN!',
-            '🏆 XFTC athletes — check your meet schedule for upcoming competitions.',
-            '📣 New coaching staff announced for the 2026 season.',
+            '🏃 Season registration is now open!',
+            sprintf( '🏆 %s athletes — check your meet schedule for upcoming competitions.', $club_name ),
+            '📣 Check back here for the latest club announcements.',
         ];
     }
 

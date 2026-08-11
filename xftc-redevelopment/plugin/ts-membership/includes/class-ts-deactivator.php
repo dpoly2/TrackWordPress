@@ -15,6 +15,10 @@ class TRACKSUITE_Deactivator {
      * Tables are only dropped on full uninstall (uninstall.php).
      */
     public static function deactivate() {
+        $timestamp = wp_next_scheduled( 'TRACKSUITE_data_retention_cleanup' );
+        if ( $timestamp ) {
+            wp_unschedule_event( $timestamp, 'TRACKSUITE_data_retention_cleanup' );
+        }
         flush_rewrite_rules();
     }
 }
