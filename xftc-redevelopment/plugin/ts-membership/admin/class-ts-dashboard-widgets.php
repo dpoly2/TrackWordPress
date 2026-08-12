@@ -14,6 +14,9 @@ class TS_Dashboard_Widgets {
     }
 
     public static function register_widgets() {
+        if ( ! current_user_can( 'TRACKSUITE_view_reports' ) ) {
+            return;
+        }
         wp_add_dashboard_widget( 'ts_upcoming_meets', 'Upcoming Meets', [ __CLASS__, 'widget_upcoming_meets' ] );
         wp_add_dashboard_widget( 'ts_recent_payments', 'Recent Payments', [ __CLASS__, 'widget_recent_payments' ] );
         wp_add_dashboard_widget( 'ts_payroll_due', 'Payroll Due', [ __CLASS__, 'widget_payroll_due' ] );
