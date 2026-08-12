@@ -38,7 +38,8 @@ class TRACKSUITE_Reports {
         $memberships_table = $wpdb->prefix . 'TRACKSUITE_memberships';
         $seasons_table      = $wpdb->prefix . 'TRACKSUITE_seasons';
 
-        $where = $season_id ? $wpdb->prepare( 'WHERE m.season_id = %d', $season_id ) : '';
+        $season_where_m = $season_id ? $wpdb->prepare( 'WHERE m.season_id = %d', $season_id ) : '';
+        $season_where_s = $season_id ? $wpdb->prepare( 'WHERE s.id = %d', $season_id ) : '';
 
         $by_season = $wpdb->get_results(
             "SELECT s.id, s.name, s.type,
@@ -50,12 +51,13 @@ class TRACKSUITE_Reports {
                     SUM(m.status = 'cancelled') AS cancelled_count
              FROM {$seasons_table} s
              LEFT JOIN {$memberships_table} m ON m.season_id = s.id
+             {$season_where_s}
              GROUP BY s.id
              ORDER BY s.id DESC",
             ARRAY_A
         ) ?: [];
 
-        $totals = $wpdb->get_row( "SELECT COUNT(*) AS total, SUM(status = 'active') AS active FROM {$memberships_table} {$where}", ARRAY_A )
+        $totals = $wpdb->get_row( "SELECT COUNT(*) AS total, SUM(m.status = 'active') AS active FROM {$memberships_table} m {$season_where_m}", ARRAY_A )
             ?: [ 'total' => 0, 'active' => 0 ];
 
         return [
