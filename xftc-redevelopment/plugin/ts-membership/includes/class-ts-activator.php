@@ -208,7 +208,8 @@ class TRACKSUITE_Activator {
             status         ENUM('pending','completed','failed','refunded') NOT NULL DEFAULT 'pending',
             created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
-            KEY user_id (user_id)
+            KEY user_id (user_id),
+            UNIQUE KEY reference (reference_type, reference_id)
         ) $charset;";
 
         foreach ( $tables as $sql ) {

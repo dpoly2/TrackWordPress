@@ -112,31 +112,23 @@ class TRACKSUITE_WooCommerce {
         global $wpdb;
         $payments_table = $wpdb->prefix . 'TRACKSUITE_payments';
 
-        // Idempotent: an order can fire woocommerce_order_status_completed more
-        // than once (e.g. manual status changes) — don't double-log it.
-        $already_logged = $wpdb->get_var( $wpdb->prepare(
-            "SELECT id FROM {$payments_table} WHERE reference_type = 'uniform' AND reference_id = %d",
-            $order_id
-        ) );
-        if ( $already_logged ) {
-            return;
-        }
-
         $user_id = $order->get_customer_id();
         if ( ! $user_id ) {
             return; // Guest checkout — nothing to attribute this to in the portal.
         }
 
-        $wpdb->insert( $payments_table, [
-            'user_id'        => $user_id,
-            'reference_type' => 'uniform',
-            'reference_id'   => $order_id,
-            'amount'         => (float) $order->get_total(),
-            'gateway'        => 'manual',
-            'transaction_id' => $order->get_transaction_id() ?: ( 'WC-' . $order_id ),
-            'status'         => 'completed',
-            'created_at'     => current_time( 'mysql' ),
-        ] );
+        // Atomic upsert: the UNIQUE KEY on (reference_type, reference_id) prevents
+        // duplicate rows even when two workers race on the same order_id.
+        $wpdb->query( $wpdb->prepare(
+            "INSERT IGNORE INTO {$payments_table}
+                (user_id, reference_type, reference_id, amount, gateway, transaction_id, status, created_at)
+             VALUES (%d, 'uniform', %d, %f, 'manual', %s, 'completed', %s)",
+            $user_id,
+            $order_id,
+            (float) $order->get_total(),
+            $order->get_transaction_id() ?: ( 'WC-' . $order_id ),
+            current_time( 'mysql' )
+        ) );
     }
 
     /**
