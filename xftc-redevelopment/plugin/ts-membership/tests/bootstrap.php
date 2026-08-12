@@ -256,8 +256,14 @@ if ( ! function_exists( 'flush_rewrite_rules' ) ) {
 if ( ! function_exists( 'wp_mail' ) ) {
     function wp_mail( $to, $subject, $message, $headers = '' ) { return true; }
 }
-if ( ! function_exists( 'get_option_users_can_register' ) ) {
-    // placeholder to keep the list grep-able; intentionally unused.
+// WordPress core helpers used directly as callbacks (e.g. permission_callback
+// => '__return_true' for public REST routes) — real functions in WP core,
+// not something the plugin defines, so they need stubbing here too.
+if ( ! function_exists( '__return_true' ) ) {
+    function __return_true() { return true; }
+}
+if ( ! function_exists( '__return_false' ) ) {
+    function __return_false() { return false; }
 }
 
 // ─── $wpdb ──────────────────────────────────────────────────────────────────

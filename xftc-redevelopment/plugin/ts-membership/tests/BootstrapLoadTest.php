@@ -1,4 +1,5 @@
 <?php
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -36,7 +37,7 @@ class BootstrapLoadTest extends TestCase {
         ];
     }
 
-    /** @dataProvider classProvider */
+    #[DataProvider( 'classProvider' )]
     public function test_class_is_defined( string $class ): void {
         $this->assertTrue( class_exists( $class ), "Expected class {$class} to be defined after plugin boot." );
     }
