@@ -39,7 +39,7 @@ jobs:
             const prNumber = '${{ steps.pr.outputs.pr_number }}';
             const prUrl    = '${{ steps.pr.outputs.pr_url }}';
             const runUrl   = '${{ steps.pr.outputs.run_url }}';
-            const branch   = '${{ steps.pr.outputs.branch }}';
+            const branch   = ${{ toJSON(steps.pr.outputs.branch) }};
             const sha      = '${{ steps.pr.outputs.sha }}';
             const actor    = '${{ steps.pr.outputs.actor }}';
 
