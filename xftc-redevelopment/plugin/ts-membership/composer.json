@@ -1,0 +1,13 @@
+{
+    "name": "dpoly2/ts-membership",
+    "description": "XFTC Membership WordPress Plugin",
+    "require": {
+        "stripe/stripe-php": "^15.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10"
+    },
+    "autoload-dev": {
+        "classmap": ["tests/"]
+    }
+}
